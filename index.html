@@ -25,9 +25,12 @@
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;padding:0;background:radial-gradient(circle at 50% -10%, var(--bg-glow), var(--bg) 55%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;min-height:100vh;}
-  body{padding:max(18px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom));}
+  body{padding:max(18px, env(safe-area-inset-top)) 16px calc(76px + env(safe-area-inset-bottom));}
   header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding-top:6px;}
   .date{font-size:13px;color:var(--text-soft);text-transform:capitalize;}
+  .header-actions{display:flex;gap:8px;}
+  .icon-btn{width:38px;height:38px;border-radius:12px;border:1px solid var(--card-border-hover);background:var(--card);color:var(--text-soft);display:flex;align-items:center;justify-content:center;font-size:16px;}
+  .icon-btn:active{transform:scale(0.94);background:#1a2338;}
   .add-btn{border:1px solid var(--card-border-hover);background:var(--card);color:var(--text);border-radius:12px;padding:9px 16px;font-size:14px;display:flex;align-items:center;gap:6px;}
   .add-btn:active{transform:scale(0.96);background:#1a2338;}
   .grid{display:flex;flex-direction:column;gap:12px;}
@@ -60,18 +63,109 @@
   .reset-btn:active{background:#1a2338;}
   .hint{text-align:center;font-size:12px;color:var(--text-faint);margin-top:22px;}
   .particle{position:absolute;width:6px;height:6px;border-radius:50%;pointer-events:none;top:50%;left:50%;}
+
+  .tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--card-border);padding:8px 16px calc(8px + env(safe-area-inset-bottom));gap:8px;}
+  .tab-btn{flex:1;border:none;background:transparent;color:var(--text-faint);font-size:13px;padding:8px 0;border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:2px;}
+  .tab-btn.active{color:var(--text);background:#1a2338;}
+  .tab-icon{font-size:18px;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);display:none;align-items:flex-end;justify-content:center;z-index:20;}
+  .overlay.open{display:flex;}
+  .sheet{background:var(--card);border-radius:20px 20px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));width:100%;max-width:480px;display:flex;flex-direction:column;gap:14px;}
+  .sheet h3{margin:0;font-size:16px;font-weight:600;}
+  .field-label{font-size:12px;color:var(--text-soft);margin-bottom:6px;display:block;}
+  .field-input{width:100%;background:#0F1524;border:1px solid var(--card-border-hover);border-radius:10px;padding:11px 12px;color:var(--text);font-size:15px;}
+  .field-input:focus{outline:none;border-color:#60A5FA;}
+  .sheet-actions{display:flex;gap:10px;margin-top:4px;}
+  .sheet-btn{flex:1;padding:11px;border-radius:10px;border:1px solid var(--card-border-hover);background:transparent;color:var(--text);font-size:14px;}
+  .sheet-btn.primary{background:#2563EB;border-color:#2563EB;color:#fff;}
+  .sheet-btn.danger{color:#F87171;border-color:#3a2431;}
+  .sheet-close{align-self:center;color:var(--text-faint);font-size:13px;padding:4px;}
+
+  .friends-status{font-size:12px;color:var(--text-faint);margin-bottom:14px;}
+  .member-card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;padding:14px 16px;margin-bottom:12px;}
+  .member-name{font-size:15px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+  .you-badge{font-size:11px;color:var(--text-faint);font-weight:400;background:#1a2338;padding:2px 8px;border-radius:6px;}
+  .member-cat-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-top:1px solid var(--card-border);}
+  .member-cat-row:first-of-type{border-top:none;}
+  .member-cat-name{font-size:13px;color:var(--text-soft);}
+  .member-cat-count{font-size:14px;font-weight:600;}
+  .empty-state{text-align:center;padding:60px 20px;color:var(--text-faint);}
+  .empty-state .icon-big{font-size:32px;margin-bottom:10px;}
+  .empty-state button{margin-top:16px;}
 </style>
 </head>
 <body>
-<header>
-  <span class="date" id="dateLabel"></span>
-  <button class="add-btn" id="addBtn">+ Kategorie</button>
-</header>
-<div class="grid" id="grid"></div>
-<div class="hint">Wird automatisch auf diesem Gerät gespeichert.</div>
 
+<div id="view-ich" class="view active">
+  <header>
+    <span class="date" id="dateLabel"></span>
+    <div class="header-actions">
+      <button class="icon-btn" id="settingsBtn" aria-label="Profil">&#9881;</button>
+      <button class="add-btn" id="addBtn">+ Kategorie</button>
+    </div>
+  </header>
+  <div class="grid" id="grid"></div>
+  <div class="hint">Wird automatisch auf diesem Gerät gespeichert.</div>
+</div>
+
+<div id="view-freunde" class="view">
+  <header>
+    <span class="date">Freunde</span>
+  </header>
+  <div class="friends-status" id="friendsStatus"></div>
+  <div id="friendsList"></div>
+</div>
+
+<div class="tabbar">
+  <button class="tab-btn active" id="tabIchBtn"><span class="tab-icon">&#9998;</span>Ich</button>
+  <button class="tab-btn" id="tabFreundeBtn"><span class="tab-icon">&#128101;</span>Freunde</button>
+</div>
+
+<div class="overlay" id="settingsOverlay">
+  <div class="sheet">
+    <h3>Profil & Gruppe</h3>
+    <div>
+      <label class="field-label">Dein Name</label>
+      <input class="field-input" id="nameInput" placeholder="z.B. Elias" maxlength="20">
+    </div>
+    <div>
+      <label class="field-label">Gruppencode (frei wählbar, mit Freunden teilen)</label>
+      <input class="field-input" id="codeInput" placeholder="z.B. zweisam2026" maxlength="30">
+    </div>
+    <div class="sheet-actions">
+      <button class="sheet-btn danger" id="leaveBtn">Gruppe verlassen</button>
+      <button class="sheet-btn primary" id="saveProfileBtn">Speichern</button>
+    </div>
+    <button class="sheet-close" id="closeSettingsBtn">Schließen</button>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script>
+// ==== Firebase config: hier deine eigenen Werte aus der Firebase-Konsole eintragen ====
+const firebaseConfig = {
+  apiKey: "AIzaSyCAZ_DWGUAINJPjsKqXu1AK_XF81qiAjl0",
+  authDomain: "strichliste-a742d.firebaseapp.com",
+  projectId: "strichliste-a742d",
+  storageBucket: "strichliste-a742d.firebasestorage.app",
+  messagingSenderId: "221047265942",
+  appId: "1:221047265942:web:e61ec8e5753632cd5e80b7"
+};
+let db = null;
+try{
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+}catch(e){
+  console.warn('Firebase nicht konfiguriert', e);
+}
+
 const STORAGE_KEY = 'strichliste-categories';
+const PROFILE_KEY = 'strichliste-profile';
+const MYID_KEY = 'strichliste-my-id';
 const PALETTE = ['#60A5FA','#F87171','#FBBF24','#4FD1C5','#A78BFA','#F472B6','#34D399','#FB923C'];
 const defaults = [
   {id:'c1', name:'Bewegung', count:0, color:PALETTE[0]},
@@ -83,9 +177,32 @@ const defaults = [
 ];
 let categories = [];
 let openPaletteId = null;
+let profile = { name:'', code:'' };
+let myId = null;
+let unsubscribeFriends = null;
 const grid = document.getElementById('grid');
 
 function uid(){ return 'c' + Math.random().toString(36).slice(2,9); }
+
+function getMyId(){
+  let id = localStorage.getItem(MYID_KEY);
+  if(!id){
+    id = 'u' + Math.random().toString(36).slice(2,10);
+    localStorage.setItem(MYID_KEY, id);
+  }
+  return id;
+}
+
+function loadProfile(){
+  try{
+    const raw = localStorage.getItem(PROFILE_KEY);
+    profile = raw ? JSON.parse(raw) : { name:'', code:'' };
+  }catch(e){ profile = { name:'', code:'' }; }
+}
+
+function saveProfile(){
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+}
 
 function load(){
   try{
@@ -101,6 +218,20 @@ function load(){
 
 function save(){
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(categories)); }catch(e){}
+  syncToCloud();
+}
+
+let syncTimer = null;
+function syncToCloud(){
+  if(!db || !profile.code) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(()=>{
+    db.collection('groups').doc(profile.code).collection('members').doc(myId).set({
+      name: profile.name || 'Ohne Namen',
+      categories: categories.map(c=>({name:c.name, count:c.count, color:c.color})),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).catch(e=> console.warn('sync failed', e));
+  }, 400);
 }
 
 function strokeGroup(n, color){
@@ -250,7 +381,117 @@ document.getElementById('addBtn').onclick = ()=>{
   save(); render();
 };
 
+// ==== Tabs ====
+const tabIchBtn = document.getElementById('tabIchBtn');
+const tabFreundeBtn = document.getElementById('tabFreundeBtn');
+const viewIch = document.getElementById('view-ich');
+const viewFreunde = document.getElementById('view-freunde');
+
+tabIchBtn.onclick = ()=>{
+  tabIchBtn.classList.add('active'); tabFreundeBtn.classList.remove('active');
+  viewIch.classList.add('active'); viewFreunde.classList.remove('active');
+};
+tabFreundeBtn.onclick = ()=>{
+  tabFreundeBtn.classList.add('active'); tabIchBtn.classList.remove('active');
+  viewFreunde.classList.add('active'); viewIch.classList.remove('active');
+  renderFriendsView();
+};
+
+// ==== Settings sheet ====
+const settingsOverlay = document.getElementById('settingsOverlay');
+const nameInput = document.getElementById('nameInput');
+const codeInput = document.getElementById('codeInput');
+
+document.getElementById('settingsBtn').onclick = ()=>{
+  nameInput.value = profile.name;
+  codeInput.value = profile.code;
+  settingsOverlay.classList.add('open');
+};
+document.getElementById('closeSettingsBtn').onclick = ()=> settingsOverlay.classList.remove('open');
+document.getElementById('saveProfileBtn').onclick = ()=>{
+  profile.name = nameInput.value.trim();
+  profile.code = codeInput.value.trim();
+  saveProfile();
+  settingsOverlay.classList.remove('open');
+  syncToCloud();
+  subscribeFriends();
+};
+document.getElementById('leaveBtn').onclick = ()=>{
+  profile.code = '';
+  saveProfile();
+  codeInput.value = '';
+  settingsOverlay.classList.remove('open');
+  subscribeFriends();
+};
+
+// ==== Friends view ====
+const friendsStatus = document.getElementById('friendsStatus');
+const friendsList = document.getElementById('friendsList');
+let latestMembers = [];
+
+function subscribeFriends(){
+  if(unsubscribeFriends){ unsubscribeFriends(); unsubscribeFriends = null; }
+  latestMembers = [];
+  if(!db || !profile.code){
+    renderFriendsView();
+    return;
+  }
+  unsubscribeFriends = db.collection('groups').doc(profile.code).collection('members')
+    .onSnapshot((snap)=>{
+      latestMembers = [];
+      snap.forEach(doc=> latestMembers.push({ id: doc.id, ...doc.data() }));
+      renderFriendsView();
+    }, (err)=>{
+      console.warn('friends listener error', err);
+      renderFriendsView(err);
+    });
+}
+
+function renderFriendsView(error){
+  if(!db){
+    friendsStatus.textContent = '';
+    friendsList.innerHTML = `<div class="empty-state"><div class="icon-big">&#9881;</div>Cloud-Sync ist noch nicht eingerichtet.</div>`;
+    return;
+  }
+  if(!profile.code){
+    friendsStatus.textContent = '';
+    friendsList.innerHTML = `<div class="empty-state"><div class="icon-big">&#128101;</div>Noch keiner Gruppe beigetreten.<br><button class="sheet-btn primary" id="joinFromEmptyBtn" style="margin-top:14px;">Gruppencode eingeben</button></div>`;
+    const btn = document.getElementById('joinFromEmptyBtn');
+    if(btn) btn.onclick = ()=> document.getElementById('settingsBtn').click();
+    return;
+  }
+  if(error){
+    friendsStatus.textContent = '';
+    friendsList.innerHTML = `<div class="empty-state">Verbindung fehlgeschlagen. Prüfe die Firebase-Konfiguration.</div>`;
+    return;
+  }
+  friendsStatus.textContent = `Gruppe "${profile.code}" · ${latestMembers.length} Mitglied${latestMembers.length===1?'':'er'}`;
+  if(latestMembers.length===0){
+    friendsList.innerHTML = `<div class="empty-state">Noch niemand hier. Teile den Code "${profile.code}" mit deinen Freunden.</div>`;
+    return;
+  }
+  const sorted = latestMembers.slice().sort((a,b)=> a.id===myId ? -1 : b.id===myId ? 1 : (a.name||'').localeCompare(b.name||''));
+  friendsList.innerHTML = sorted.map(m=>{
+    const cats = (m.categories || []);
+    const rows = cats.length ? cats.map(c=>`
+      <div class="member-cat-row">
+        <span class="member-cat-name">${(c.name||'').replace(/</g,'&lt;')}</span>
+        <span class="member-cat-count" style="color:${c.color||'#60A5FA'}">${c.count||0}</span>
+      </div>
+    `).join('') : `<div class="member-cat-row"><span class="member-cat-name">Noch keine Kategorien</span></div>`;
+    return `
+      <div class="member-card">
+        <div class="member-name">${(m.name||'Ohne Namen').replace(/</g,'&lt;')} ${m.id===myId ? '<span class="you-badge">Du</span>' : ''}</div>
+        ${rows}
+      </div>
+    `;
+  }).join('');
+}
+
+myId = getMyId();
+loadProfile();
 load();
+subscribeFriends();
 
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
