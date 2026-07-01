@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Strichliste">
+<meta name="theme-color" content="#0A0E17">
+<title>Tages-Strichliste</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root{
+    --bg:#0A0E17;
+    --bg-glow:#111a30;
+    --card:#141B2D;
+    --card-border:#232C42;
+    --card-border-hover:#334063;
+    --text:#ECEFF5;
+    --text-soft:#8891A6;
+    --text-faint:#5A6378;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:radial-gradient(circle at 50% -10%, var(--bg-glow), var(--bg) 55%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;min-height:100vh;}
+  body{padding:max(18px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom));}
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding-top:6px;}
+  .date{font-size:13px;color:var(--text-soft);text-transform:capitalize;}
+  .add-btn{border:1px solid var(--card-border-hover);background:var(--card);color:var(--text);border-radius:12px;padding:9px 16px;font-size:14px;display:flex;align-items:center;gap:6px;}
+  .add-btn:active{transform:scale(0.96);background:#1a2338;}
+  .grid{display:flex;flex-direction:column;gap:12px;}
+  .card{position:relative;background:var(--card);border:1px solid var(--card-border);border-radius:16px;padding:16px 17px;display:flex;flex-direction:column;gap:11px;overflow:hidden;transition:box-shadow .4s ease, border-color .4s ease;}
+  .card.celebrate{border-color:var(--cat-color, #60A5FA);box-shadow:0 0 0 1px var(--cat-color, #60A5FA), 0 0 24px -4px var(--cat-color, #60A5FA);}
+  .card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .name-row{display:flex;align-items:center;gap:10px;flex:1;min-width:0;}
+  .swatch{width:16px;height:16px;border-radius:50%;flex-shrink:0;border:2px solid rgba(255,255,255,0.15);}
+  .name-input{border:none;background:transparent;font-size:16px;font-weight:600;color:var(--text);width:100%;padding:2px 0;min-width:0;}
+  .name-input:focus{outline:none;}
+  .remove-btn{border:none;background:transparent;color:var(--text-faint);font-size:18px;line-height:1;padding:4px 6px;flex-shrink:0;}
+  .palette{display:none;gap:8px;padding:2px 0 4px;flex-wrap:wrap;}
+  .palette.open{display:flex;}
+  .palette-dot{width:24px;height:24px;border-radius:50%;border:2px solid transparent;}
+  .palette-dot.active{border-color:var(--text);}
+  .marks{min-height:24px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;position:relative;}
+  .group{position:relative;display:flex;gap:3px;align-items:flex-end;width:26px;height:22px;}
+  .stroke{width:3.5px;height:22px;background:var(--cat-color, #60A5FA);border-radius:2px;}
+  .diag{position:absolute;left:-3px;top:9px;width:30px;height:3.5px;background:var(--text);border-radius:2px;transform:rotate(-32deg);}
+  .empty-marks{font-size:13px;color:var(--text-faint);}
+  .bottom-row{display:flex;align-items:center;justify-content:space-between;}
+  .count{font-variant-numeric:tabular-nums;font-size:26px;font-weight:700;color:var(--text);display:inline-block;}
+  .count.bump{animation:bump .32s ease;}
+  @keyframes bump{0%{transform:scale(1);}40%{transform:scale(1.28);}100%{transform:scale(1);}}
+  .controls{display:flex;gap:8px;align-items:center;}
+  .btn{width:42px;height:42px;border-radius:12px;border:1px solid var(--card-border-hover);background:#1a2338;color:var(--text);font-size:20px;display:flex;align-items:center;justify-content:center;position:relative;}
+  .btn.plus-btn{border-color:var(--cat-color, #60A5FA);color:var(--cat-color, #60A5FA);}
+  .btn:active{transform:scale(0.92);}
+  .reset-btn{width:36px;height:36px;border-radius:12px;border:1px solid var(--card-border-hover);background:transparent;color:var(--text-faint);font-size:16px;display:flex;align-items:center;justify-content:center;}
+  .reset-btn:active{background:#1a2338;}
+  .hint{text-align:center;font-size:12px;color:var(--text-faint);margin-top:22px;}
+  .particle{position:absolute;width:6px;height:6px;border-radius:50%;pointer-events:none;top:50%;left:50%;}
+</style>
+</head>
+<body>
+<header>
+  <span class="date" id="dateLabel"></span>
+  <button class="add-btn" id="addBtn">+ Kategorie</button>
+</header>
+<div class="grid" id="grid"></div>
+<div class="hint">Wird automatisch auf diesem Gerät gespeichert.</div>
+
+<script>
+const STORAGE_KEY = 'strichliste-categories';
+const PALETTE = ['#60A5FA','#F87171','#FBBF24','#4FD1C5','#A78BFA','#F472B6','#34D399','#FB923C'];
+const defaults = [
+  {id:'c1', name:'Bewegung', count:0, color:PALETTE[0]},
+  {id:'c2', name:'Lesen', count:0, color:PALETTE[1]},
+  {id:'c3', name:'Meditation', count:0, color:PALETTE[2]},
+  {id:'c4', name:'Gesund gegessen', count:0, color:PALETTE[3]},
+  {id:'c5', name:'Rauchfrei', count:0, color:PALETTE[4]},
+  {id:'c6', name:'Früh ins Bett', count:0, color:PALETTE[5]}
+];
+let categories = [];
+let openPaletteId = null;
+const grid = document.getElementById('grid');
+
+function uid(){ return 'c' + Math.random().toString(36).slice(2,9); }
+
+function load(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    categories = raw ? JSON.parse(raw) : defaults.slice();
+    categories.forEach((c,i)=>{ if(!c.color) c.color = PALETTE[i % PALETTE.length]; });
+  }catch(e){
+    categories = defaults.slice();
+  }
+  document.getElementById('dateLabel').textContent = new Date().toLocaleDateString('de-DE', { weekday:'long', day:'numeric', month:'long' });
+  render();
+}
+
+function save(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(categories)); }catch(e){}
+}
+
+function strokeGroup(n, color){
+  let strokes = '';
+  for(let i=0;i<Math.min(n,4);i++){ strokes += `<div class="stroke" style="--cat-color:${color}"></div>`; }
+  if(n>=5){
+    return `<div class="group">${strokes}<div class="diag"></div></div>`;
+  }
+  return `<div class="group" style="position:static;">${strokes}</div>`;
+}
+
+function tallyMarks(count, color){
+  if(count<=0) return '<span class="empty-marks">Noch keine Striche</span>';
+  const fullGroups = Math.floor(count/5);
+  const remainder = count % 5;
+  let html = '';
+  for(let i=0;i<fullGroups;i++) html += strokeGroup(5, color);
+  if(remainder>0) html += strokeGroup(remainder, color);
+  return html;
+}
+
+function paletteRow(cat){
+  return PALETTE.map(c=>`<button class="palette-dot ${c===cat.color?'active':''}" style="background:${c}" data-id="${cat.id}" data-color="${c}"></button>`).join('');
+}
+
+function render(){
+  grid.innerHTML = '';
+  categories.forEach(cat=>{
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.setProperty('--cat-color', cat.color);
+    card.innerHTML = `
+      <div class="card-top">
+        <div class="name-row">
+          <button class="swatch" style="background:${cat.color}" data-id="${cat.id}"></button>
+          <input class="name-input" value="${cat.name.replace(/"/g,'&quot;')}" data-id="${cat.id}" />
+        </div>
+        <button class="remove-btn" data-id="${cat.id}">&times;</button>
+      </div>
+      <div class="palette ${openPaletteId===cat.id?'open':''}" data-palette-for="${cat.id}">${paletteRow(cat)}</div>
+      <div class="marks">${tallyMarks(cat.count, cat.color)}</div>
+      <div class="bottom-row">
+        <span class="count" data-count-for="${cat.id}">${cat.count}</span>
+        <div class="controls">
+          <button class="btn minus-btn" data-id="${cat.id}">&minus;</button>
+          <button class="btn plus-btn" data-id="${cat.id}" style="--cat-color:${cat.color}">+</button>
+          <button class="reset-btn" data-id="${cat.id}" title="Zurücksetzen">&#8635;</button>
+        </div>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+  attach();
+}
+
+function attach(){
+  grid.querySelectorAll('.plus-btn').forEach(b=> b.onclick = (e)=> change(b.dataset.id, 1, e));
+  grid.querySelectorAll('.minus-btn').forEach(b=> b.onclick = ()=> change(b.dataset.id, -1));
+  grid.querySelectorAll('.reset-btn').forEach(b=> b.onclick = ()=> setCount(b.dataset.id, 0));
+  grid.querySelectorAll('.remove-btn').forEach(b=> b.onclick = ()=> removeCat(b.dataset.id));
+  grid.querySelectorAll('.name-input').forEach(inp=> inp.onchange = ()=> renameCat(inp.dataset.id, inp.value));
+  grid.querySelectorAll('.swatch').forEach(b=> b.onclick = ()=> togglePalette(b.dataset.id));
+  grid.querySelectorAll('.palette-dot').forEach(b=> b.onclick = ()=> setColor(b.dataset.id, b.dataset.color));
+}
+
+function vibrate(pattern){
+  if(navigator.vibrate){ try{ navigator.vibrate(pattern); }catch(e){} }
+}
+
+function burst(originEl, color){
+  const rect = originEl.getBoundingClientRect();
+  const count = 8;
+  for(let i=0;i<count;i++){
+    const p = document.createElement('div');
+    p.className = 'particle';
+    p.style.background = color;
+    p.style.left = (rect.left + rect.width/2) + 'px';
+    p.style.top = (rect.top + rect.height/2) + 'px';
+    p.style.position = 'fixed';
+    document.body.appendChild(p);
+    const angle = (Math.PI * 2 * i) / count + Math.random()*0.4;
+    const dist = 30 + Math.random()*24;
+    const dx = Math.cos(angle) * dist;
+    const dy = Math.sin(angle) * dist;
+    p.animate([
+      { transform: 'translate(-50%,-50%) scale(1)', opacity: 1 },
+      { transform: `translate(${dx-rect.width/2}px, ${dy-rect.height/2}px) scale(0.3)`, opacity: 0 }
+    ], { duration: 480, easing: 'cubic-bezier(.2,.8,.2,1)' }).onfinish = ()=> p.remove();
+  }
+}
+
+function change(id, delta, evt){
+  const cat = categories.find(c=>c.id===id);
+  if(!cat) return;
+  const before = cat.count;
+  cat.count = Math.max(0, cat.count + delta);
+  save();
+  render();
+  if(delta>0 && cat.count>before){
+    vibrate(12);
+    const countEl = grid.querySelector(`[data-count-for="${id}"]`);
+    if(countEl){ countEl.classList.add('bump'); setTimeout(()=>countEl.classList.remove('bump'), 340); }
+    if(evt && evt.currentTarget){ burst(evt.currentTarget, cat.color); }
+    if(cat.count % 5 === 0){
+      vibrate([15,40,25]);
+      const cardEl = grid.querySelectorAll('.card')[categories.indexOf(cat)];
+      if(cardEl){
+        cardEl.classList.add('celebrate');
+        setTimeout(()=> cardEl.classList.remove('celebrate'), 900);
+      }
+    }
+  }
+}
+function setCount(id, value){
+  const cat = categories.find(c=>c.id===id);
+  if(!cat) return;
+  cat.count = value;
+  save(); render();
+}
+function renameCat(id, name){
+  const cat = categories.find(c=>c.id===id);
+  if(!cat) return;
+  cat.name = name.trim() || 'Ohne Namen';
+  save();
+}
+function removeCat(id){
+  if(categories.length<=1) return;
+  categories = categories.filter(c=>c.id!==id);
+  if(openPaletteId===id) openPaletteId = null;
+  save(); render();
+}
+function togglePalette(id){
+  openPaletteId = openPaletteId===id ? null : id;
+  render();
+}
+function setColor(id, color){
+  const cat = categories.find(c=>c.id===id);
+  if(!cat) return;
+  cat.color = color;
+  openPaletteId = null;
+  save(); render();
+}
+document.getElementById('addBtn').onclick = ()=>{
+  if(categories.length>=8) return;
+  const nextColor = PALETTE[categories.length % PALETTE.length];
+  categories.push({id:uid(), name:'Neue Kategorie', count:0, color:nextColor});
+  save(); render();
+};
+
+load();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
