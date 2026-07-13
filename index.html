@@ -140,7 +140,11 @@
       <input class="field-input" id="nameInput" placeholder="z.B. Elias" maxlength="20">
     </div>
     <div>
-      <label class="field-label">Gruppencode (frei wählbar, mit Freunden teilen)</label>
+      <label class="field-label">Sync-Code (optional) – gleicher Code auf mehreren Geräten = gleiche Liste</label>
+      <input class="field-input" id="syncCodeInput" placeholder="z.B. elias-privat" maxlength="30">
+    </div>
+    <div>
+      <label class="field-label">Gruppencode (optional) – zum Vergleichen mit Freunden</label>
       <input class="field-input" id="codeInput" placeholder="z.B. zweisam2026" maxlength="30">
     </div>
     <div class="sheet-actions">
@@ -199,14 +203,16 @@ const defaults = [
 let categories = [];
 let history = {};
 let openPaletteId = null;
-let profile = { name:'', code:'' };
+let profile = { name:'', code:'', syncCode:'' };
 let myId = null;
 let unsubscribeFriends = null;
+let unsubscribePersonal = null;
 const grid = document.getElementById('grid');
 
 function uid(){ return 'c' + Math.random().toString(36).slice(2,9); }
 
 function getMyId(){
+  if(profile.syncCode) return profile.syncCode;
   let id = localStorage.getItem(MYID_KEY);
   if(!id){
     id = 'u' + Math.random().toString(36).slice(2,10);
@@ -218,8 +224,9 @@ function getMyId(){
 function loadProfile(){
   try{
     const raw = localStorage.getItem(PROFILE_KEY);
-    profile = raw ? JSON.parse(raw) : { name:'', code:'' };
-  }catch(e){ profile = { name:'', code:'' }; }
+    profile = raw ? JSON.parse(raw) : { name:'', code:'', syncCode:'' };
+    if(!('syncCode' in profile)) profile.syncCode = '';
+  }catch(e){ profile = { name:'', code:'', syncCode:'' }; }
 }
 
 function saveProfile(){
@@ -276,6 +283,7 @@ function recordHistory(cat){
 function save(){
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(categories)); }catch(e){}
   syncToCloud();
+  pushPersonalToCloud();
 }
 
 let syncTimer = null;
@@ -289,6 +297,47 @@ function syncToCloud(){
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }).catch(e=> console.warn('sync failed', e));
   }, 400);
+}
+
+let personalSyncTimer = null;
+function pushPersonalToCloud(){
+  if(!db || !profile.syncCode) return;
+  clearTimeout(personalSyncTimer);
+  personalSyncTimer = setTimeout(()=>{
+    db.collection('users').doc(profile.syncCode).set({
+      categories: categories.map(c=>({id:c.id, name:c.name, count:c.count, color:c.color})),
+      history: history,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).catch(e=> console.warn('personal sync failed', e));
+  }, 400);
+}
+
+function subscribePersonal(){
+  if(unsubscribePersonal){ unsubscribePersonal(); unsubscribePersonal = null; }
+  if(!db || !profile.syncCode) return;
+  unsubscribePersonal = db.collection('users').doc(profile.syncCode)
+    .onSnapshot((snap)=>{
+      if(snap.metadata.hasPendingWrites) return;
+      if(snap.exists){
+        const data = snap.data();
+        if(Array.isArray(data.categories) && data.categories.length){
+          categories = data.categories.map((c,i)=>({
+            id: c.id || uid(),
+            name: c.name || 'Ohne Namen',
+            count: c.count || 0,
+            color: c.color || PALETTE[i % PALETTE.length]
+          }));
+          try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(categories)); }catch(e){}
+        }
+        if(data.history && typeof data.history === 'object'){
+          history = data.history;
+          saveHistoryLocal();
+        }
+        render();
+      } else {
+        pushPersonalToCloud();
+      }
+    }, (err)=> console.warn('personal sync listener error', err));
 }
 
 function strokeGroup(n, color){
@@ -563,18 +612,23 @@ tabFreundeBtn.onclick = ()=>{
 const settingsOverlay = document.getElementById('settingsOverlay');
 const nameInput = document.getElementById('nameInput');
 const codeInput = document.getElementById('codeInput');
+const syncCodeInput = document.getElementById('syncCodeInput');
 
 document.getElementById('settingsBtn').onclick = ()=>{
   nameInput.value = profile.name;
   codeInput.value = profile.code;
+  syncCodeInput.value = profile.syncCode || '';
   settingsOverlay.classList.add('open');
 };
 document.getElementById('closeSettingsBtn').onclick = ()=> settingsOverlay.classList.remove('open');
 document.getElementById('saveProfileBtn').onclick = ()=>{
   profile.name = nameInput.value.trim();
   profile.code = codeInput.value.trim();
+  profile.syncCode = syncCodeInput.value.trim();
   saveProfile();
+  myId = getMyId();
   settingsOverlay.classList.remove('open');
+  subscribePersonal();
   syncToCloud();
   subscribeFriends();
 };
@@ -650,11 +704,12 @@ function renderFriendsView(error){
   }).join('');
 }
 
-myId = getMyId();
 loadProfile();
+myId = getMyId();
 loadHistory();
 load();
 subscribeFriends();
+subscribePersonal();
 
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
