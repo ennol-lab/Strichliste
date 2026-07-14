@@ -67,6 +67,9 @@
   .reset-btn:active{background:#1a2338;}
   .hint{text-align:center;font-size:12px;color:var(--text-faint);margin-top:22px;}
   .particle{position:absolute;width:6px;height:6px;border-radius:50%;pointer-events:none;top:50%;left:50%;}
+  .streak-badge{font-size:13px;font-weight:600;color:#FBBF24;background:rgba(251,191,36,0.14);padding:3px 9px;border-radius:8px;display:inline-flex;align-items:center;gap:3px;}
+  .toast{position:fixed;left:50%;top:16px;transform:translate(-50%,-24px);background:var(--card);border:1px solid var(--card-border-hover);color:var(--text);padding:11px 18px;border-radius:12px;font-size:14px;font-weight:600;opacity:0;transition:opacity .32s ease, transform .32s ease;z-index:50;box-shadow:0 10px 28px -6px rgba(0,0,0,0.55);pointer-events:none;max-width:calc(100% - 32px);text-align:center;}
+  .toast.show{opacity:1;transform:translate(-50%,0);}
 
   .tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--card-border);padding:8px 16px calc(8px + env(safe-area-inset-bottom));gap:8px;}
   .tab-btn{flex:1;border:none;background:transparent;color:var(--text-faint);font-size:13px;padding:8px 0;border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:2px;}
@@ -91,6 +94,9 @@
   .highscore-value{font-size:30px;font-weight:700;}
   .highscore-label{font-size:12px;color:var(--text-soft);}
   .chart-wrap{margin-top:2px;}
+  .stats-row{display:flex;gap:24px;margin-top:-4px;}
+  .stat-value{font-size:20px;font-weight:700;}
+  .stat-label{font-size:11px;color:var(--text-soft);display:block;}
 
   .friends-status{font-size:12px;color:var(--text-faint);margin-bottom:14px;}
   .member-card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;padding:14px 16px;margin-bottom:12px;}
@@ -161,6 +167,10 @@
     <div class="highscore-row">
       <span class="highscore-value" id="historyHighscore">0</span>
       <span class="highscore-label">Highscore<span id="historyHighscoreDate"></span></span>
+    </div>
+    <div class="stats-row">
+      <div><span class="stat-value" id="currentStreakValue">0</span><span class="stat-label">Tage aktuelle Serie</span></div>
+      <div><span class="stat-value" id="bestStreakValue">0</span><span class="stat-label">Tage beste Serie</span></div>
     </div>
     <div class="chart-wrap" id="historyChartWrap"></div>
     <button class="sheet-close" id="closeHistoryBtn">Schließen</button>
@@ -280,6 +290,56 @@ function recordHistory(cat){
   saveHistoryLocal();
 }
 
+const STREAK_MILESTONES = [2,3,5,7,10,14,21,30,50,75,100];
+
+function isDayActive(catId, key){
+  return !!(history[catId] && history[catId][key] > 0);
+}
+
+function computeStreak(catId){
+  let streak = 0;
+  let d = new Date();
+  if(!isDayActive(catId, dateKey(d))){
+    d.setDate(d.getDate()-1);
+  }
+  while(isDayActive(catId, dateKey(d))){
+    streak++;
+    d.setDate(d.getDate()-1);
+  }
+  return streak;
+}
+
+function computeBestStreak(catId){
+  const hist = history[catId] || {};
+  const keys = Object.keys(hist).filter(k => hist[k] > 0).sort();
+  if(keys.length === 0) return 0;
+  let best = 1, current = 1;
+  for(let i=1;i<keys.length;i++){
+    const diffDays = Math.round((new Date(keys[i]) - new Date(keys[i-1])) / 86400000);
+    current = diffDays === 1 ? current+1 : 1;
+    if(current > best) best = current;
+  }
+  return Math.max(best, computeStreak(catId));
+}
+
+function streakBadge(catId){
+  const streak = computeStreak(catId);
+  if(streak < 2) return '';
+  return `<span class="streak-badge">&#128293; ${streak}</span>`;
+}
+
+function showToast(text){
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = text;
+  document.body.appendChild(toast);
+  requestAnimationFrame(()=> toast.classList.add('show'));
+  setTimeout(()=>{
+    toast.classList.remove('show');
+    setTimeout(()=> toast.remove(), 320);
+  }, 2400);
+}
+
 function save(){
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(categories)); }catch(e){}
   syncToCloud();
@@ -385,7 +445,10 @@ function render(){
       <div class="palette ${openPaletteId===cat.id?'open':''}" data-palette-for="${cat.id}">${paletteRow(cat)}</div>
       <div class="marks">${tallyMarks(cat.count, cat.color)}</div>
       <div class="bottom-row">
-        <span class="count" data-count-for="${cat.id}">${cat.count}</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="count" data-count-for="${cat.id}">${cat.count}</span>
+          ${streakBadge(cat.id)}
+        </div>
         <div class="controls">
           <button class="btn minus-btn" data-id="${cat.id}">&minus;</button>
           <button class="btn plus-btn" data-id="${cat.id}" style="--cat-color:${cat.color}">+</button>
@@ -502,6 +565,8 @@ function openHistory(id){
   hsEl.textContent = highscore;
   hsEl.style.color = cat.color;
   document.getElementById('historyHighscoreDate').textContent = highDate ? ' · ' + formatShortDate(highDate) : (highscore>0 ? ' · heute' : '');
+  document.getElementById('currentStreakValue').textContent = computeStreak(cat.id);
+  document.getElementById('bestStreakValue').textContent = computeBestStreak(cat.id);
   document.getElementById('historyChartWrap').innerHTML = renderChartSVG(days, values, cat.color);
   historyOverlay.classList.add('open');
 }
@@ -536,6 +601,7 @@ function change(id, delta, evt){
   const cat = categories.find(c=>c.id===id);
   if(!cat) return;
   const before = cat.count;
+  const wasActiveToday = isDayActive(cat.id, todayKey());
   cat.count = Math.max(0, cat.count + delta);
   recordHistory(cat);
   save();
@@ -551,6 +617,18 @@ function change(id, delta, evt){
       if(cardEl){
         cardEl.classList.add('celebrate');
         setTimeout(()=> cardEl.classList.remove('celebrate'), 900);
+      }
+    }
+    if(!wasActiveToday){
+      const streak = computeStreak(cat.id);
+      if(STREAK_MILESTONES.includes(streak)){
+        vibrate([20,60,20,60,30]);
+        showToast(`\u{1F525} ${cat.name}: ${streak} Tage Serie!`);
+        const cardEl = grid.querySelectorAll('.card')[categories.indexOf(cat)];
+        if(cardEl){
+          cardEl.classList.add('celebrate');
+          setTimeout(()=> cardEl.classList.remove('celebrate'), 1300);
+        }
       }
     }
   }
