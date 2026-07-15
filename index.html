@@ -74,6 +74,19 @@
   .tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--card-border);padding:8px 16px calc(8px + env(safe-area-inset-bottom));gap:8px;}
   .tab-btn{flex:1;border:none;background:transparent;color:var(--text-faint);font-size:13px;padding:8px 0;border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:2px;}
   .tab-btn.active{color:var(--text);background:#1a2338;}
+  .cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+  .cal-month-label{font-size:15px;font-weight:600;text-transform:capitalize;}
+  .cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;color:var(--text-faint);margin-bottom:6px;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;}
+  .cal-cell{aspect-ratio:1;background:var(--card);border:1px solid var(--card-border);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:3px 2px;position:relative;}
+  .cal-cell.today{border-color:#60A5FA;}
+  .cal-cell.dim{opacity:0.32;}
+  .cal-daynum{font-size:11px;color:var(--text-soft);}
+  .cal-dots{display:flex;flex-wrap:wrap;gap:2px;justify-content:center;max-width:100%;}
+  .cal-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;}
+  .cal-legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:18px;}
+  .legend-item{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-soft);}
+  .legend-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
   .tab-icon{font-size:18px;}
   .view{display:none;}
   .view.active{display:block;}
@@ -125,6 +138,20 @@
   <div class="hint">Wird automatisch auf diesem Gerät gespeichert.</div>
 </div>
 
+<div id="view-kalender" class="view">
+  <header>
+    <span class="date">Kalender</span>
+  </header>
+  <div class="cal-nav">
+    <button class="icon-btn" id="calPrevBtn" aria-label="Vorheriger Monat">&#8249;</button>
+    <span class="cal-month-label" id="calMonthLabel"></span>
+    <button class="icon-btn" id="calNextBtn" aria-label="Nächster Monat">&#8250;</button>
+  </div>
+  <div class="cal-weekdays"><span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span>Sa</span><span>So</span></div>
+  <div class="cal-grid" id="calGrid"></div>
+  <div class="cal-legend" id="calLegend"></div>
+</div>
+
 <div id="view-freunde" class="view">
   <header>
     <span class="date">Freunde</span>
@@ -135,6 +162,7 @@
 
 <div class="tabbar">
   <button class="tab-btn active" id="tabIchBtn"><span class="tab-icon">&#9998;</span>Ich</button>
+  <button class="tab-btn" id="tabKalenderBtn"><span class="tab-icon">&#128197;</span>Kalender</button>
   <button class="tab-btn" id="tabFreundeBtn"><span class="tab-icon">&#128101;</span>Freunde</button>
 </div>
 
@@ -174,6 +202,14 @@
     </div>
     <div class="chart-wrap" id="historyChartWrap"></div>
     <button class="sheet-close" id="closeHistoryBtn">Schließen</button>
+  </div>
+</div>
+
+<div class="overlay" id="dayDetailOverlay">
+  <div class="sheet">
+    <h3 id="dayDetailTitle">Tag</h3>
+    <div id="dayDetailList"></div>
+    <button class="sheet-close" id="closeDayDetailBtn">Schließen</button>
   </div>
 </div>
 
@@ -394,6 +430,8 @@ function subscribePersonal(){
           saveHistoryLocal();
         }
         render();
+        const kalenderBtn = document.getElementById('tabKalenderBtn');
+        if(kalenderBtn && kalenderBtn.classList.contains('active')) renderCalendar();
       } else {
         pushPersonalToCloud();
       }
@@ -670,21 +708,119 @@ document.getElementById('addBtn').onclick = ()=>{
   save(); render();
 };
 
-// ==== Tabs ====
-const tabIchBtn = document.getElementById('tabIchBtn');
-const tabFreundeBtn = document.getElementById('tabFreundeBtn');
-const viewIch = document.getElementById('view-ich');
-const viewFreunde = document.getElementById('view-freunde');
+// ==== Kalender ====
+let calYear, calMonth;
+{
+  const now = new Date();
+  calYear = now.getFullYear();
+  calMonth = now.getMonth();
+}
 
-tabIchBtn.onclick = ()=>{
-  tabIchBtn.classList.add('active'); tabFreundeBtn.classList.remove('active');
-  viewIch.classList.add('active'); viewFreunde.classList.remove('active');
+function daysInMonth(year, month){ return new Date(year, month+1, 0).getDate(); }
+function startWeekdayMonday(year, month){
+  const jsDay = new Date(year, month, 1).getDay();
+  return (jsDay + 6) % 7;
+}
+function buildMonthCells(year, month){
+  const total = daysInMonth(year, month);
+  const offset = startWeekdayMonday(year, month);
+  const cells = [];
+  const prevMonth = month===0 ? 11 : month-1;
+  const prevYear = month===0 ? year-1 : year;
+  const prevTotal = daysInMonth(prevYear, prevMonth);
+  for(let i=0;i<offset;i++){
+    const dayNum = prevTotal - offset + 1 + i;
+    cells.push({ date: new Date(prevYear, prevMonth, dayNum), inMonth:false });
+  }
+  for(let d=1; d<=total; d++){
+    cells.push({ date: new Date(year, month, d), inMonth:true });
+  }
+  while(cells.length % 7 !== 0){
+    const last = cells[cells.length-1].date;
+    const next = new Date(last);
+    next.setDate(last.getDate()+1);
+    cells.push({ date: next, inMonth:false });
+  }
+  return cells;
+}
+
+function renderCalendar(){
+  const label = new Date(calYear, calMonth, 1).toLocaleDateString('de-DE', { month:'long', year:'numeric' });
+  document.getElementById('calMonthLabel').textContent = label;
+  const cells = buildMonthCells(calYear, calMonth);
+  const todayStr = todayKey();
+  const gridEl = document.getElementById('calGrid');
+  gridEl.innerHTML = cells.map(cell=>{
+    const ds = dateKey(cell.date);
+    const dots = categories.filter(c => (history[c.id]||{})[ds] > 0)
+      .map(c=>`<span class="cal-dot" style="background:${c.color}"></span>`).join('');
+    const classes = ['cal-cell'];
+    if(ds===todayStr) classes.push('today');
+    if(!cell.inMonth) classes.push('dim');
+    return `<div class="${classes.join(' ')}" data-date="${ds}">
+      <span class="cal-daynum">${cell.date.getDate()}</span>
+      <div class="cal-dots">${dots}</div>
+    </div>`;
+  }).join('');
+  gridEl.querySelectorAll('.cal-cell').forEach(el=> el.onclick = ()=> openDayDetail(el.dataset.date));
+
+  document.getElementById('calLegend').innerHTML = categories.map(c=>
+    `<span class="legend-item"><span class="legend-dot" style="background:${c.color}"></span>${c.name}</span>`
+  ).join('');
+}
+
+document.getElementById('calPrevBtn').onclick = ()=>{
+  calMonth--; if(calMonth<0){ calMonth=11; calYear--; }
+  renderCalendar();
 };
-tabFreundeBtn.onclick = ()=>{
-  tabFreundeBtn.classList.add('active'); tabIchBtn.classList.remove('active');
-  viewFreunde.classList.add('active'); viewIch.classList.remove('active');
-  renderFriendsView();
+document.getElementById('calNextBtn').onclick = ()=>{
+  calMonth++; if(calMonth>11){ calMonth=0; calYear++; }
+  renderCalendar();
 };
+
+const dayDetailOverlay = document.getElementById('dayDetailOverlay');
+document.getElementById('closeDayDetailBtn').onclick = ()=> dayDetailOverlay.classList.remove('open');
+
+function openDayDetail(dateStr){
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const dateObj = new Date(y, m-1, d);
+  document.getElementById('dayDetailTitle').textContent = dateObj.toLocaleDateString('de-DE', { weekday:'long', day:'numeric', month:'long' });
+  const entries = categories
+    .map(c => ({ ...c, dayCount: (history[c.id]||{})[dateStr] || 0 }))
+    .filter(c => c.dayCount > 0);
+  const list = document.getElementById('dayDetailList');
+  if(entries.length===0){
+    list.innerHTML = `<div class="empty-state" style="padding:30px 10px;">Keine Einträge an diesem Tag.</div>`;
+  } else {
+    list.innerHTML = entries.map(c=>`
+      <div class="member-cat-row">
+        <span class="member-cat-name" style="display:flex;align-items:center;gap:8px;">
+          <span class="legend-dot" style="background:${c.color}"></span>${c.name}
+        </span>
+        <span class="member-cat-count" style="color:${c.color}">${c.dayCount}</span>
+      </div>
+    `).join('');
+  }
+  dayDetailOverlay.classList.add('open');
+}
+
+// ==== Tabs ====
+const tabDefs = {
+  ich: { btn: document.getElementById('tabIchBtn'), view: document.getElementById('view-ich') },
+  kalender: { btn: document.getElementById('tabKalenderBtn'), view: document.getElementById('view-kalender') },
+  freunde: { btn: document.getElementById('tabFreundeBtn'), view: document.getElementById('view-freunde') }
+};
+function switchTab(name){
+  Object.keys(tabDefs).forEach(k=>{
+    tabDefs[k].btn.classList.toggle('active', k===name);
+    tabDefs[k].view.classList.toggle('active', k===name);
+  });
+  if(name==='freunde') renderFriendsView();
+  if(name==='kalender') renderCalendar();
+}
+tabDefs.ich.btn.onclick = ()=> switchTab('ich');
+tabDefs.kalender.btn.onclick = ()=> switchTab('kalender');
+tabDefs.freunde.btn.onclick = ()=> switchTab('freunde');
 
 // ==== Settings sheet ====
 const settingsOverlay = document.getElementById('settingsOverlay');
